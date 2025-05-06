@@ -1,227 +1,361 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Upload Part Details</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body {
-      background-color: #f7f7f7;
-    }
-    .form-container {
-      max-width: 600px;
-      margin: auto;
-      padding: 30px;
-      background-color: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-    h4 {
-      font-weight: 600;
-    }
-    .form-control, .form-select {
-      border-radius: 8px;
-    }
-    .btn-success {
-      border-radius: 8px;
-      padding: 10px;
-      font-weight: 500;
-    }
-    .btn-success:hover {
-      background-color: #28a745;
-      box-shadow: 0 4px 10px rgba(0, 128, 0, 0.2);
-    }
-    .alert-info, .alert-danger, .alert-success {
-      font-weight: 500;
-    }
-  </style>
-</head>
-<body class="d-flex justify-content-center align-items-center min-vh-100">
-
-<div class="container">
-  <div id="formArea" class="form-container" style="display: none;">
-    <h4 class="mb-4 text-center">Upload Part Details</h4>
-    <form id="uploadForm">
-      <div class="mb-3">
-        <label for="partName" class="form-label">Select Part</label>
-        <select class="form-control" id="partName" required>
-          <option value="">Loading parts...</option>
-        </select>
-      </div>
-
-      <div class="mb-3">
-        <label for="quantity" class="form-label">Select Quantity</label>
-        <select class="form-select" id="quantity" required>
-          <option value="">Choose Quantity</option>
-          <option value="1" selected>1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-        </select>
-      </div>      
-
-      <div class="mb-3">
-        <label for="provider" class="form-label">Select Provider</label>
-        <select class="form-select" id="provider" required>
-          <option value="">Choose Provider</option>
-          <option value="Serviz">Serviz</option>
-          <option value="Service Center">Service Center</option>
-        </select>
-      </div>
-
-      <div class="mb-3">
-        <label for="partSerial" class="form-label">Serial Number of Part</label>
-        <input type="text" class="form-control" id="partSerial" placeholder="Enter Part Serial Number" required>
-      </div>
-
-      <div class="mb-3">
-        <label for="partPhoto" class="form-label">Upload Part Photo</label>
-        <input class="form-control" type="file" id="partPhoto" accept="image/*" required>
-      </div>
-
-      <div class="d-grid">
-        <button id="submitButton" class="btn btn-success mt-4" type="submit">Upload Part Info</button>
-      </div>
-    </form>
-    <div id="result" class="mt-3 text-center"></div>
-  </div>
-
-  <div id="errorArea" class="text-center" style="display: none;">
-    <h2 class="text-danger">Session Expired or Invalid</h2>
-    <p class="alert alert-danger">It seems your link is expired or session is invalid. Please retry again.</p>
-  </div>
-</div>
-
-<script>
-  const urlParams = new URLSearchParams(window.location.search);
-  const requiredParams = ['category', 'brand', 'modalNo', 'token', 'id', 'orderId', 'sender', 'phoneNoId', 'currentStatus'];
-  const sessionParams = {};
-  let isFreshLoad = false;
-
-  requiredParams.forEach(param => {
-    const value = urlParams.get(param);
-    if (value) {
-      sessionStorage.setItem(param, value);
-      sessionParams[param] = value;
-      isFreshLoad = true;
-    } else {
-      sessionParams[param] = sessionStorage.getItem(param);
-    }
-  });
-
-  const missing = requiredParams.filter(p => !sessionParams[p]);
-  if (missing.length > 0) {
-    document.getElementById("errorArea").style.display = "block";
-    document.title = "Session Error";
-    throw new Error("Missing required query parameters: " + missing.join(", "));
-  } else {
-    document.getElementById("formArea").style.display = "block";
-  }
-
-  if (isFreshLoad) {
-    const cleanUrl = window.location.origin + window.location.pathname;
-    window.history.replaceState({}, document.title, cleanUrl);
-  }
-
-  const token = sessionParams['token'];
-  const resultDiv = document.getElementById('result');
-  const category = sessionParams['category'];
-  const brand = sessionParams['brand'];
-  const modelNo = sessionParams['modalNo'];
-
-  async function loadPartsDropdown() {
-  try {
-    const res = await fetch(`http://172.188.56.173:8008/api/v1/spares/dd?category=${sessionParams.category}&brand=${sessionParams.brand}&modelNo=${sessionParams.modalNo}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
+  <head>
+    <meta charset="UTF-8" />
+    <title>Upload Part Details</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background-color: #f7f7f7;
       }
-    });
+      .form-container {
+        max-width: 600px;
+        margin: auto;
+        padding: 30px;
+        background-color: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      h4 {
+        font-weight: 600;
+      }
+      .form-control,
+      .form-select {
+        border-radius: 8px;
+      }
+      .btn-success {
+        border-radius: 8px;
+        padding: 10px;
+        font-weight: 500;
+      }
+      .btn-success:hover {
+        background-color: #28a745;
+        box-shadow: 0 4px 10px rgba(0, 128, 0, 0.2);
+      }
+      .alert-info,
+      .alert-danger,
+      .alert-success {
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body class="d-flex justify-content-center align-items-center min-vh-100">
+    <div class="container">
+      <div id="formArea" class="form-container" style="display: none">
+        <h4 class="mb-4 text-center">Upload Part Details</h4>
+        <form id="uploadForm">
+          <div class="mb-3">
+            <label for="partName" class="form-label">Select Part</label>
+            <select class="form-control" id="partName" required>
+              <option value="">Loading parts...</option>
+            </select>
+          </div>
 
-    const data = await res.json();
+          <div class="mb-3">
+            <label for="quantity" class="form-label">Select Quantity</label>
+            <select class="form-select" id="quantity" required>
+              <option value="">Choose Quantity</option>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
 
-    const partSelect = document.getElementById('partName');
-    partSelect.innerHTML = `<option value="">-- Select Part --</option>`;
+          <div class="mb-3">
+            <label for="provider" class="form-label">Select Provider</label>
+            <select class="form-select" id="provider" required>
+              <option value="">Choose Provider</option>
+              <option value="Serviz">Serviz</option>
+              <option value="Service Center">Service Center</option>
+            </select>
+          </div>
 
-    if (res.ok && data.payload && Array.isArray(data.payload.items)) {
-      data.payload.items.forEach(part => {
-        const option = document.createElement('option');
-        option.value = part._id; // or part.name, if you prefer
-        option.textContent = `${part.name} - ${part.code}`;
-        partSelect.appendChild(option);
-      });
-    } else {
-      partSelect.innerHTML = `<option value="">No parts found</option>`;
-      console.warn("Invalid response:", data);
-    }
-  } catch (err) {
-    console.error("Error fetching parts:", err);
-    const partSelect = document.getElementById('partName');
-    partSelect.innerHTML = `<option value="">Failed to load parts</option>`;
-  }
-}
+          <div class="mb-3">
+            <label for="partSerial" class="form-label"
+              >Serial Number of Part</label
+            >
+            <input
+              type="text"
+              class="form-control"
+              id="partSerial"
+              placeholder="Enter Part Serial Number"
+              required
+            />
+          </div>
 
-  window.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById("formArea").style.display === "block") {
-      loadPartsDropdown();
-    }
-  });
+          <div class="mb-3">
+            <label for="partPhoto" class="form-label">Upload Part Photo</label>
+            <input
+              class="form-control"
+              type="file"
+              id="partPhoto"
+              accept="image/*"
+              required
+            />
+          </div>
 
-  document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    resultDiv.innerHTML = '';
+          <div class="mb-3">
+            <button type="button" class="btn btn-primary" id="addPartBtn">
+              Add Part to List
+            </button>
+          </div>
+          <div id="partListDisplay" class="mt-4"></div>
+          <div class="d-grid">
+            <button
+              id="submitButton"
+              class="btn btn-success mt-4"
+              type="submit"
+            >
+              Upload Part Info
+            </button>
+          </div>
+        </form>
+        <div id="formArea" style="display: none"></div>
+        <div id="errorArea" style="display: none" class="alert alert-danger">
+          Missing required parameters.
+        </div>
+        <div id="result"></div>
+      </div>
 
-    const partName = document.getElementById('partName').value;
-    const quantity = document.getElementById('quantity').value;
-    const provider = document.getElementById('provider').value;
-    const partSerial = document.getElementById('partSerial').value;
-    const partPhoto = document.getElementById('partPhoto').files[0];
+      <div id="errorArea" class="text-center" style="display: none">
+        <h2 class="text-danger">Session Expired or Invalid</h2>
+        <p class="alert alert-danger">
+          It seems your link is expired or session is invalid. Please retry
+          again.
+        </p>
+      </div>
+    </div>
 
-    if (!partPhoto) {
-      resultDiv.innerHTML = `<p class="alert alert-danger">Please upload a part photo.</p>`;
-      return;
-    }
+    <script>
+      // --- Setup ---
 
-    const formData = new FormData();
-    formData.append("file", partPhoto);
+      const urlParams = new URLSearchParams(window.location.search);
+      const requiredParams = [
+        "category",
+        "brand",
+        "modalNo",
+        "token",
+        "id",
+        "orderId",
+        "sender",
+        "phoneNoId",
+        "currentStatus",
+      ];
+      const sessionParams = {};
+      const partMap = {}; // Stores part._id => part object
+      const partList = []; // Final list of added parts
+      const documents = []; // Tracks uploaded documents
+      let isFreshLoad = false;
 
-    try {
-      const uploadResponse = await fetch("http://172.188.56.173:8008/api/v1/upload?type=order-documents", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        },
-        body: formData
+      const resultDiv = document.getElementById("result");
+      const partListDisplay = document.getElementById("partListDisplay");
+
+      // --- Handle URL or sessionStorage Params ---
+      requiredParams.forEach((param) => {
+        const value = urlParams.get(param);
+        if (value) {
+          sessionStorage.setItem(param, value);
+          sessionParams[param] = value;
+          isFreshLoad = true;
+        } else {
+          sessionParams[param] = sessionStorage.getItem(param);
+        }
       });
 
-      const uploadData = await uploadResponse.json();
-
-      if (!uploadResponse.ok) {
-        throw new Error(uploadData.message || 'Upload failed');
+      const missing = requiredParams.filter((p) => !sessionParams[p]);
+      if (missing.length > 0) {
+        document.getElementById("errorArea").style.display = "block";
+        document.title = "Session Error";
+        throw new Error(
+          "Missing required query parameters: " + missing.join(", ")
+        );
+      } else {
+        document.getElementById("formArea").style.display = "block";
       }
 
-      const imageUrl = uploadData.payload;
+      if (isFreshLoad) {
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
 
-      const partDetails = {
-        part: partName,
-        quantity,
-        provider,
-        serial: partSerial,
-        photo: imageUrl
-      };
+      const token = sessionParams.token;
 
-      console.log("Final Part Info:", partDetails);
-      resultDiv.innerHTML = `<p class="alert alert-success">✅ Part uploaded successfully!</p>`;
+      // --- Load Part Dropdown Options ---
+      async function loadPartsDropdown() {
+        try {
+          const res = await fetch(
+            `http://172.188.56.173:8008/api/v1/spares/dd?category=${sessionParams.category}&brand=${sessionParams.brand}&modelNo=${sessionParams.modalNo}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
 
-      // Optional: Send partDetails to backend
+          const data = await res.json();
+          const partSelect = document.getElementById("partName");
+          partSelect.innerHTML = `<option value="">-- Select Part --</option>`;
 
-    } catch (error) {
-      console.error("Upload error:", error);
-      resultDiv.innerHTML = `<p class="alert alert-danger">Error uploading part: ${error.message}</p>`;
-    }
-  });
-</script>
+          if (res.ok && data.payload?.items?.length) {
+            data.payload.items.forEach((part) => {
+              partMap[part._id] = part;
+              const option = document.createElement("option");
+              option.value = part._id;
+              option.textContent = `${part.name} - ${part.code}`;
+              partSelect.appendChild(option);
+            });
+          } else {
+            partSelect.innerHTML = `<option value="">No parts found</option>`;
+            console.warn("Invalid response:", data);
+          }
+        } catch (err) {
+          console.error("Error loading parts:", err);
+          document.getElementById(
+            "partName"
+          ).innerHTML = `<option value="">Failed to load parts</option>`;
+        }
+      }
 
-</body>
+      // --- Add Part to List ---
+      async function handleAddPart() {
+        resultDiv.innerHTML = "";
+        const partId = document.getElementById("partName").value;
+        const quantity = document.getElementById("quantity").value;
+        const provider = document.getElementById("provider").value;
+        const partSerial = document.getElementById("partSerial").value;
+        const partPhoto = document.getElementById("partPhoto").files[0];
+
+        if (!partId || !quantity || !provider || !partSerial || !partPhoto) {
+          resultDiv.innerHTML = `<p class="alert alert-danger">Please fill in all fields and upload a photo.</p>`;
+          return;
+        }
+
+        const selectedPart = partMap[partId];
+        if (!selectedPart) {
+          resultDiv.innerHTML = `<p class="alert alert-danger">Invalid part selected.</p>`;
+          return;
+        }
+
+        try {
+          const formData = new FormData();
+          formData.append("file", partPhoto);
+
+          const uploadRes = await fetch(
+            "http://172.188.56.173:8008/api/v1/upload?type=order-documents",
+            {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              body: formData,
+            }
+          );
+
+          const uploadData = await uploadRes.json();
+          if (!uploadRes.ok)
+            throw new Error(uploadData.message || "Upload failed");
+
+          const imageUrl = uploadData.payload;
+
+          const partObject = {
+            image: imageUrl,
+            parts: selectedPart, // full part object
+            date: new Date().toISOString(),
+            providedBy: {
+              name: provider,
+              quantity: quantity,
+              image: imageUrl,
+            },
+            serialNo: partSerial,
+            status: 0,
+            price: selectedPart.sellingPrice,
+            qty: quantity,
+            totalPrice: (
+              parseInt(selectedPart.sellingPrice) * parseInt(quantity)
+            ).toString(),
+          };
+
+          partList.push(partObject);
+          resultDiv.innerHTML = `<p class="alert alert-success">✅ Part added to list!</p>`;
+          renderPartList();
+
+          // Clear form fields after successful add
+          document.getElementById("partName").value = "";
+          document.getElementById("quantity").value = "1";
+          document.getElementById("provider").value = "";
+          document.getElementById("partSerial").value = "";
+          document.getElementById("partPhoto").value = "";
+        } catch (error) {
+          console.error("Upload error:", error);
+          resultDiv.innerHTML = `<p class="alert alert-danger">Error uploading part: ${error.message}</p>`;
+        }
+      }
+
+      // --- Render Part List ---
+      function renderPartList() {
+        if (!partList.length) {
+          partListDisplay.innerHTML = `<p class="text-muted">No parts added yet.</p>`;
+          return;
+        }
+
+        const htmlRows = partList
+          .map(
+            (part, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${part.parts.name} (${part.parts.code})</td>
+        <td>${part.qty}</td>
+        <td>${part.serialNo}</td>
+        <td>${part.providedBy.name}</td>
+        <td><img src="${
+          part.image
+        }" style="height: 50px;" alt="Part Photo"></td>
+      </tr>
+    `
+          )
+          .join("");
+
+        partListDisplay.innerHTML = `
+      <h5>🧩 Parts Added</h5>
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Part</th>
+            <th>Qty</th>
+            <th>Serial</th>
+            <th>Provider</th>
+            <th>Photo</th>
+          </tr>
+        </thead>
+        <tbody>${htmlRows}</tbody>
+      </table>
+    `;
+      }
+
+      // --- Clear Part List ---
+      function clearPartList() {
+        partList.length = 0;
+        resultDiv.innerHTML = `<p class="alert alert-warning">🔄 List cleared.</p>`;
+        renderPartList();
+      }
+
+      // --- On Page Load ---
+      window.addEventListener("DOMContentLoaded", () => {
+        if (document.getElementById("formArea").style.display === "block") {
+          loadPartsDropdown();
+        }
+
+        document
+          .getElementById("addPartBtn")
+          .addEventListener("click", handleAddPart);
+        document
+          .getElementById("clearListBtn")
+          .addEventListener("click", clearPartList);
+        renderPartList(); // Initial render
+      });
+    </script>
+  </body>
 </html>
