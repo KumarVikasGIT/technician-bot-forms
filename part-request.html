@@ -11,7 +11,7 @@
     }
     .form-container {
       max-width: 600px;
-      margin: 50px auto;
+      margin: auto;
       padding: 30px;
       background-color: #fff;
       border-radius: 12px;
@@ -32,34 +32,21 @@
       background-color: #28a745;
       box-shadow: 0 4px 10px rgba(0, 128, 0, 0.2);
     }
-    .alert-info {
-      font-weight: 500;
-    }
-    .alert-success {
-      color: green;
-      font-weight: 500;
-    }
-    .alert-danger {
-      color: red;
+    .alert-info, .alert-danger, .alert-success {
       font-weight: 500;
     }
   </style>
 </head>
-<body>
+<body class="d-flex justify-content-center align-items-center min-vh-100">
 
 <div class="container">
-  <div class="form-container">
+  <div id="formArea" class="form-container" style="display: none;">
     <h4 class="mb-4 text-center">Upload Part Details</h4>
     <form id="uploadForm">
       <div class="mb-3">
         <label for="partName" class="form-label">Select Part</label>
-        <select class="form-select" id="partName" required>
-          <option value="">Choose Part</option>
-          <option value="Compressor">Compressor</option>
-          <option value="PCB">PCB</option>
-          <option value="Motor">Motor</option>
-          <option value="Display">Display</option>
-          <!-- Add more parts as needed -->
+        <select class="form-control" id="partName" required>
+          <option value="">Loading parts...</option>
         </select>
       </div>
 
@@ -67,12 +54,13 @@
         <label for="quantity" class="form-label">Select Quantity</label>
         <select class="form-select" id="quantity" required>
           <option value="">Choose Quantity</option>
-          <option value="1">1</option>
+          <option value="1" selected>1</option>
           <option value="2">2</option>
           <option value="3">3</option>
           <option value="4">4</option>
+          <option value="5">5</option>
         </select>
-      </div>
+      </div>      
 
       <div class="mb-3">
         <label for="provider" class="form-label">Select Provider</label>
@@ -97,13 +85,88 @@
         <button id="submitButton" class="btn btn-success mt-4" type="submit">Upload Part Info</button>
       </div>
     </form>
-
     <div id="result" class="mt-3 text-center"></div>
+  </div>
+
+  <div id="errorArea" class="text-center" style="display: none;">
+    <h2 class="text-danger">Session Expired or Invalid</h2>
+    <p class="alert alert-danger">It seems your link is expired or session is invalid. Please retry again.</p>
   </div>
 </div>
 
 <script>
+  const urlParams = new URLSearchParams(window.location.search);
+  const requiredParams = ['category', 'brand', 'modalNo', 'token', 'id', 'orderId', 'sender', 'phoneNoId', 'currentStatus'];
+  const sessionParams = {};
+  let isFreshLoad = false;
+
+  requiredParams.forEach(param => {
+    const value = urlParams.get(param);
+    if (value) {
+      sessionStorage.setItem(param, value);
+      sessionParams[param] = value;
+      isFreshLoad = true;
+    } else {
+      sessionParams[param] = sessionStorage.getItem(param);
+    }
+  });
+
+  const missing = requiredParams.filter(p => !sessionParams[p]);
+  if (missing.length > 0) {
+    document.getElementById("errorArea").style.display = "block";
+    document.title = "Session Error";
+    throw new Error("Missing required query parameters: " + missing.join(", "));
+  } else {
+    document.getElementById("formArea").style.display = "block";
+  }
+
+  if (isFreshLoad) {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+
+  const token = sessionParams['token'];
   const resultDiv = document.getElementById('result');
+  const category = sessionParams['category'];
+  const brand = sessionParams['brand'];
+  const modelNo = sessionParams['modalNo'];
+
+  async function loadPartsDropdown() {
+  try {
+    const res = await fetch(`http://172.188.56.173:8008/api/v1/spares/dd?category=${sessionParams.category}&brand=${sessionParams.brand}&modelNo=${sessionParams.modalNo}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    const data = await res.json();
+
+    const partSelect = document.getElementById('partName');
+    partSelect.innerHTML = `<option value="">-- Select Part --</option>`;
+
+    if (res.ok && data.payload && Array.isArray(data.payload.items)) {
+      data.payload.items.forEach(part => {
+        const option = document.createElement('option');
+        option.value = part._id; // or part.name, if you prefer
+        option.textContent = `${part.name} - ${part.code}`;
+        partSelect.appendChild(option);
+      });
+    } else {
+      partSelect.innerHTML = `<option value="">No parts found</option>`;
+      console.warn("Invalid response:", data);
+    }
+  } catch (err) {
+    console.error("Error fetching parts:", err);
+    const partSelect = document.getElementById('partName');
+    partSelect.innerHTML = `<option value="">Failed to load parts</option>`;
+  }
+}
+
+  window.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById("formArea").style.display === "block") {
+      loadPartsDropdown();
+    }
+  });
 
   document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -120,7 +183,6 @@
       return;
     }
 
-    // Upload part photo
     const formData = new FormData();
     formData.append("file", partPhoto);
 
@@ -128,7 +190,7 @@
       const uploadResponse = await fetch("http://172.188.56.173:8008/api/v1/upload?type=order-documents", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer YOUR_TOKEN_HERE`
+          "Authorization": `Bearer ${token}`
         },
         body: formData
       });
@@ -136,8 +198,7 @@
       const uploadData = await uploadResponse.json();
 
       if (!uploadResponse.ok) {
-        resultDiv.innerHTML = `<p class="alert alert-danger">Upload failed: ${uploadData.message || 'Server error'}</p>`;
-        return;
+        throw new Error(uploadData.message || 'Upload failed');
       }
 
       const imageUrl = uploadData.payload;
@@ -151,10 +212,9 @@
       };
 
       console.log("Final Part Info:", partDetails);
-
       resultDiv.innerHTML = `<p class="alert alert-success">✅ Part uploaded successfully!</p>`;
 
-      // Optionally send partDetails to another API
+      // Optional: Send partDetails to backend
 
     } catch (error) {
       console.error("Upload error:", error);
