@@ -135,280 +135,387 @@
     </div>
 
     <script>
-        // Configuration Constants
-        const BASE_URL = 'http://172.188.56.173:8008';
-        const BASE_URL_ORDERS = 'http://172.188.56.173:8009';
-        const STATUS_API_URL = 'http://172.188.56.173:8009/api/v1/order-statuses';
-        const API = {
-            PARTS: `${BASE_URL}/api/v1/spares/dd`,
-            UPLOAD: `${BASE_URL}/api/v1/upload?type=order-documents`,
-            ORDERS: `${BASE_URL_ORDERS}/api/v1/orders`
-        };
-
-        // State Management
-        let partsCatalog = new Map();
-        let selectedParts = [];
-        let sessionParams = {};
-
-        // DOM Elements
-        const elements = {
-            mainForm: document.getElementById('main-form'),
-            sessionError: document.getElementById('session-error'),
-            partSelect: document.getElementById('part-select'),
-            partsListBody: document.getElementById('parts-list-body'),
-            submitBtn: document.getElementById('submit-btn'),
-            resultMessage: document.getElementById('result-message')
-        };
-
-        // Initialization
-        document.addEventListener('DOMContentLoaded', async () => {
-            await validateSession();
-            await loadPartsCatalog();
-            setupEventListeners();
-        });
-
-        // Session Management
-        async function validateSession() {
-            const requiredParams = [
-                'category', 'brand', 'modelNo', 'token', 
-                'orderId', 'currentStatus', 'userId', 'userName','id','sender'
-            ];
-            const urlParams = new URLSearchParams(window.location.search);
-            
-            requiredParams.forEach(param => {
-                sessionParams[param] = urlParams.get(param) || sessionStorage.getItem(param);
-                sessionStorage.setItem(param, sessionParams[param]);
-            });
-
-            if (requiredParams.some(param => !sessionParams[param])) {
-                elements.sessionError.style.display = 'block';
-                return;
-            }
-            
-            elements.mainForm.style.display = 'block';
-            window.history.replaceState({}, '', window.location.pathname);
-        }
-
-        // Data Loading
-        async function loadPartsCatalog() {
-            try {
-                const response = await fetch(`${API.PARTS}?${
-                    new URLSearchParams({
-                        category: sessionParams.category,
-                        brand: sessionParams.brand,
-                        modelNo: sessionParams.modelNo
-                    })
-                }`, {
-                    headers: { Authorization: `Bearer ${sessionParams.token}` }
-                });
-
-                const { payload } = await response.json();
-                elements.partSelect.innerHTML = '<option value="">Select a part</option>';
-                
-                payload.items.forEach(part => {
-                    partsCatalog.set(part._id, part);
-                    elements.partSelect.innerHTML += `
-                        <option value="${part._id}">
-                            ${part.name} (${part.code})
-                        </option>
-                    `;
-                });
-            } catch (error) {
-                console.error('Failed to load parts:', error);
-                showToast('Error loading parts catalog', 'danger');
-            }
-        }
-
-        // Event Handlers
-        function setupEventListeners() {
-            document.getElementById('add-part-btn').addEventListener('click', addPart);
-            document.getElementById('clear-list-btn').addEventListener('click', clearPartsList);
-            document.getElementById('submit-btn').addEventListener('click', submitRequest);
-        }
-
-        // Business Logic
-        async function addPart() {
-            const partData = validatePartForm();
-            if (!partData) return;
-
-            try {
-                partData.image = await uploadPartPhoto(partData.photo);
-                selectedParts.push(partData);
-                updatePartsList();
-                resetPartForm();
-                elements.submitBtn.disabled = false;
-                showToast('Part added successfully', 'success');
-            } catch (error) {
-                showToast(error.message, 'danger');
-            }
-        }
-
-        function validatePartForm() {
-            const inputs = {
-                partId: elements.partSelect.value,
-                quantity: document.getElementById('quantity-select').value,
-                provider: document.getElementById('provider-select').value,
-                serial: document.getElementById('serial-input').value,
-                photo: document.getElementById('photo-input').files[0]
-            };
-
-            if (Object.values(inputs).some(value => !value)) {
-                showToast('Please fill all fields', 'warning');
-                return null;
-            }
-
-            const part = partsCatalog.get(inputs.partId);
-            if (!part) {
-                showToast('Invalid part selected', 'danger');
-                return null;
-            }
-
-            return {
-                ...inputs,
-                partData: part,
-                price: part.sellingPrice,
-                totalPrice: part.sellingPrice * inputs.quantity
-            };
-        }
-
-        async function uploadPartPhoto(file) {
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const response = await fetch(API.UPLOAD, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${sessionParams.token}` },
-                body: formData
-            });
-
-            if (!response.ok) throw new Error('Photo upload failed');
-            return (await response.json()).payload;
-        }
-
-        // UI Updates
-        function updatePartsList() {
-            elements.partsListBody.innerHTML = selectedParts
-                .map((part, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${part.partData.name}<br>
-                            <small class="text-muted">${part.partData.code}</small>
-                        </td>
-                        <td>${part.quantity}</td>
-                        <td>${part.serial}</td>
-                        <td>${part.provider}</td>
-                        <td><img src="${part.image}" alt="Part photo" class="img-thumbnail"></td>
-                        <td>
-                            <button class="btn btn-sm btn-danger" 
-                                onclick="removePart(${index})">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `).join('');
-        }
-
-        function resetPartForm() {
-            document.getElementById('part-form').reset();
-            document.getElementById('quantity-select').value = '1';
-        }
-
-        // Data Submission
-        async function submitRequest() {
-            elements.submitBtn.disabled = true;
-            
-            try {
-                // 1. First update the order with parts
-                const orderResponse = await fetch(`${API.ORDERS}/${sessionParams.id}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${sessionParams.token}`
-                    },
-                    body: JSON.stringify({ parts: selectedParts })
-                });
-
-                if (!orderResponse.ok) throw new Error('Order update failed');
-
-                // 2. Then update the order status
-                const statusResponse = await fetch(STATUS_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${sessionParams.token}`
-                    },
-                    body: JSON.stringify({
-                        order: { 
-                            orderId: sessionParams.orderId, 
-                            _id: sessionParams.id 
-                        },
-                        lastStatus: sessionParams.currentStatus,
-                        currentStatus: "parts_approval_pending",
-                        state: "Parts Request",
-                        statusChangeFrom: "admin",
-                        changeFrom: "admin",
-                        user: { 
-                            _id: '6464bf7e4f51a5937348796f', 
-                            firstName: sessionParams.userName ,
-                            email: "9934012217@serviz.com",
-                        }
-                    })
-                });
-
-                if (!statusResponse.ok) throw new Error('Status update failed');
-
-                // Show success message
-                elements.resultMessage.innerHTML = `
-                    <div class="alert alert-success">
-                        ✅ Request submitted successfully!
-                    </div>
-                `;
-                
-                // Clear the parts list
-                clearPartsList();
-                
-                // Close the window after 2 seconds
-                setTimeout(() => window.close(), 2000);
-            } catch (error) {
-                console.error('Submission error:', error);
-                elements.resultMessage.innerHTML = `
-                    <div class="alert alert-danger">
-                        ❌ Error: ${error.message}
-                    </div>
-                `;
-                elements.submitBtn.disabled = false;
-            }
-        }
-
-        // Utility Functions
-        function showToast(message, type = 'info') {
-            const toast = document.createElement('div');
-            toast.className = `toast align-items-center text-bg-${type} border-0`;
-            toast.innerHTML = `
-                <div class="d-flex">
-                    <div class="toast-body">${message}</div>
-                    <button type="button" class="btn-close me-2 m-auto" 
-                        data-bs-dismiss="toast"></button>
-                </div>
-            `;
-            
-            document.body.appendChild(toast);
-            new bootstrap.Toast(toast).show();
-            setTimeout(() => toast.remove(), 3000);
-        }
-
-        function removePart(index) {
-            selectedParts.splice(index, 1);
-            updatePartsList();
-            elements.submitBtn.disabled = selectedParts.length === 0;
-        }
-
-        function clearPartsList() {
-            selectedParts = [];
-            updatePartsList();
-            elements.submitBtn.disabled = true;
-            showToast('Parts list cleared', 'warning');
-        }
-    </script>
+      // Configuration Constants
+      const BASE_URL = 'http://172.188.56.173:8008';
+      const BASE_URL_ORDERS = 'http://172.188.56.173:8009';
+      const STATUS_API_URL = 'http://172.188.56.173:8009/api/v1/order-statuses';
+      const NOTIFICATION_URL = 'https://609f-2401-4900-b86-b094-96a-2fac-8076-5e9b.ngrok-free.app/notify-part-update';
+      const API = {
+          PARTS: `${BASE_URL}/api/v1/spares/dd`,
+          UPLOAD: `${BASE_URL}/api/v1/upload?type=order-documents`,
+          ORDERS: `${BASE_URL_ORDERS}/api/v1/orders`
+      };
+  
+      // State Management
+      let partsCatalog = new Map();
+      let selectedParts = [];
+      let sessionParams = {};
+  
+      // DOM Elements
+      const elements = {
+          mainForm: document.getElementById('main-form'),
+          sessionError: document.getElementById('session-error'),
+          partSelect: document.getElementById('part-select'),
+          partsListBody: document.getElementById('parts-list-body'),
+          submitBtn: document.getElementById('submit-btn'),
+          resultMessage: document.getElementById('result-message')
+      };
+  
+      // Initialization
+      document.addEventListener('DOMContentLoaded', async () => {
+          console.log('Initializing application...');
+          await validateSession();
+          await loadPartsCatalog();
+          setupEventListeners();
+      });
+  
+      // Session Management
+      async function validateSession() {
+          console.log('Validating session...');
+          const requiredParams = [
+              'category', 'brand', 'modelNo', 'token', 
+              'orderId', 'currentStatus', 'userId', 'userName','id','sender','phoneNoId'
+          ];
+          
+          try {
+              const urlParams = new URLSearchParams(window.location.search);
+              requiredParams.forEach(param => {
+                  sessionParams[param] = urlParams.get(param) || sessionStorage.getItem(param);
+                  if (!sessionParams[param]) throw new Error(`Missing parameter: ${param}`);
+                  sessionStorage.setItem(param, sessionParams[param]);
+              });
+  
+              elements.mainForm.style.display = 'block';
+              window.history.replaceState({}, '', window.location.pathname);
+              console.log('Session validated successfully');
+          } catch (error) {
+              console.error('Session validation failed:', error);
+              showSessionError('Session expired or invalid. Please close and try again.');
+          }
+      }
+  
+      function showSessionError(message) {
+          elements.mainForm.style.display = 'none';
+          elements.sessionError.style.display = 'block';
+          elements.sessionError.innerHTML = `
+              <h4 class="alert-heading">Session Error</h4>
+              <p>${message}</p>
+              <button class="btn btn-primary mt-2" onclick="window.close()">Close Window</button>
+          `;
+          
+          // Clear session data
+          const requiredParams = [
+              'category', 'brand', 'modelNo', 'token', 
+              'orderId', 'currentStatus', 'userId', 'userName','id','sender','phoneNoId'
+          ];
+          requiredParams.forEach(param => sessionStorage.removeItem(param));
+      }
+  
+      // Data Loading
+      async function loadPartsCatalog() {
+          try {
+              console.log('Loading parts catalog...');
+              const response = await fetch(`${API.PARTS}?${new URLSearchParams({
+                  category: sessionParams.category,
+                  brand: sessionParams.brand,
+                  modelNo: sessionParams.modelNo
+              })}`, {
+                  headers: { Authorization: `Bearer ${sessionParams.token}` }
+              });
+  
+              if (!response.ok) {
+                  if (response.status === 401 || response.status === 403) {
+                      throw new Error('Session invalid or token expired');
+                  }
+                  throw new Error(`HTTP error! status: ${response.status}`);
+              }
+  
+              const { payload } = await response.json();
+              
+              if (!payload?.items) throw new Error('Invalid parts data received');
+  
+              elements.partSelect.innerHTML = '<option value="">Select a part</option>';
+              
+              if (payload.items.length === 0) {
+                  elements.partSelect.innerHTML += '<option value="">No parts available</option>';
+                  showToast('No parts found for this device', 'info');
+              } else {
+                  payload.items.forEach(part => {
+                      partsCatalog.set(part._id, part);
+                      elements.partSelect.innerHTML += `
+                          <option value="${part._id}">
+                              ${part.name} (${part.code})
+                          </option>
+                      `;
+                  });
+                  console.log(`Loaded ${payload.items.length} parts successfully`);
+              }
+          } catch (error) {
+              console.error('Failed to load parts:', error);
+              if (error.message.includes('Session invalid') || error.message.includes('401') || error.message.includes('403')) {
+                  showSessionError('Your session has expired. Please close and try again.');
+              } else {
+                  showToast('Error loading parts catalog. Please try again.', 'danger');
+                  elements.partSelect.innerHTML = '<option value="">Error loading parts</option>';
+              }
+          }
+      }
+  
+      // Event Handlers
+      function setupEventListeners() {
+          document.getElementById('add-part-btn').addEventListener('click', addPart);
+          document.getElementById('clear-list-btn').addEventListener('click', clearPartsList);
+          document.getElementById('submit-btn').addEventListener('click', submitRequest);
+      }
+  
+      // Business Logic
+      async function addPart() {
+          const partData = validatePartForm();
+          if (!partData) return;
+  
+          try {
+              console.log('Adding new part...');
+              partData.image = await uploadPartPhoto(partData.photo);
+              selectedParts.push(partData);
+              updatePartsList();
+              resetPartForm();
+              elements.submitBtn.disabled = false;
+              showToast('Part added successfully', 'success');
+              console.log('Part added to list');
+          } catch (error) {
+              console.error('Error adding part:', error);
+              showToast(error.message, 'danger');
+          }
+      }
+  
+      function validatePartForm() {
+          const inputs = {
+              partId: elements.partSelect.value,
+              quantity: document.getElementById('quantity-select').value,
+              provider: document.getElementById('provider-select').value,
+              serial: document.getElementById('serial-input').value,
+              photo: document.getElementById('photo-input').files[0]
+          };
+  
+          if (Object.values(inputs).some(value => !value)) {
+              showToast('Please fill all fields', 'warning');
+              return null;
+          }
+  
+          const part = partsCatalog.get(inputs.partId);
+          if (!part) {
+              showToast('Invalid part selected', 'danger');
+              return null;
+          }
+  
+          return {
+              ...inputs,
+              partData: part,
+              price: part.sellingPrice,
+              totalPrice: part.sellingPrice * inputs.quantity
+          };
+      }
+  
+      async function uploadPartPhoto(file) {
+          console.log('Uploading part photo...');
+          const formData = new FormData();
+          formData.append('file', file);
+  
+          const response = await fetch(API.UPLOAD, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${sessionParams.token}` },
+              body: formData
+          });
+  
+          if (!response.ok) {
+              const error = await response.json().catch(() => ({}));
+              throw new Error(error.message || 'Photo upload failed');
+          }
+          
+          const data = await response.json();
+          console.log('Photo uploaded successfully');
+          return data.payload;
+      }
+  
+      // UI Updates
+      function updatePartsList() {
+          elements.partsListBody.innerHTML = selectedParts.map((part, index) => `
+              <tr>
+                  <td>${index + 1}</td>
+                  <td>${part.partData.name}<br><small class="text-muted">${part.partData.code}</small></td>
+                  <td>${part.quantity}</td>
+                  <td>${part.serial}</td>
+                  <td>${part.provider}</td>
+                  <td><img src="${part.image}" alt="Part photo" class="img-thumbnail"></td>
+                  <td><button class="btn btn-sm btn-danger" onclick="removePart(${index})"><i class="bi bi-trash"></i></button></td>
+              </tr>
+          `).join('');
+      }
+  
+      function resetPartForm() {
+          document.getElementById('part-form').reset();
+          document.getElementById('quantity-select').value = '1';
+      }
+  
+      // Data Submission
+      async function submitRequest() {
+          console.log('Submitting part request...');
+          elements.submitBtn.disabled = true;
+          
+          try {
+              // Prepare parts data
+              const partsData = selectedParts.map(part => ({
+                  parts: {
+                      _id: part.partData._id,
+                      name: part.partData.name,
+                      model: part.partData.model || part.partData.name,
+                      sellingPrice: part.partData.sellingPrice.toString(),
+                      hsnCode: part.partData.hsnCode || "",
+                      code: part.partData.code,
+                      modelCode: part.partData.modelCode || part.partData.code,
+                      ...(part.partData.brand && { brand: part.partData.brand }),
+                      ...(part.partData.isReturnable !== undefined && { isReturnable: part.partData.isReturnable })
+                  },
+                  serialNo: part.serial || "",
+                  date: new Date().toISOString(),
+                  status: 0,
+                  providedBy: {
+                      name: part.provider,
+                      value: part.provider,
+                      ...(part.image && { image: part.image })
+                  },
+                  price: part.price,
+                  qty: part.quantity,
+                  totalPrice: part.totalPrice,
+                  ...(part.image && { image: part.image })
+              }));
+  
+              const requestPayload = {
+                  parts: partsData,
+                  orderBills: [],
+                  _id: sessionParams.id
+              };
+  
+              console.log('Updating order with parts...');
+              const orderResponse = await fetch(`${API.ORDERS}/${sessionParams.id}`, {
+                  method: 'PUT',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${sessionParams.token}`
+                  },
+                  body: JSON.stringify(requestPayload)
+              });
+  
+              if (!orderResponse.ok) {
+                  const error = await orderResponse.json().catch(() => ({}));
+                  throw new Error(error.message || 'Order update failed');
+              }
+  
+              console.log('Updating order status...');
+              const statusResponse = await fetch(STATUS_API_URL, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${sessionParams.token}`
+                  },
+                  body: JSON.stringify({
+                      order: { 
+                          orderId: sessionParams.orderId, 
+                          _id: sessionParams.id 
+                      },
+                      lastStatus: sessionParams.currentStatus,
+                      currentStatus: "parts_approval_pending",
+                      state: "Parts Request",
+                      statusChangeFrom: "admin",
+                      changeFrom: "admin",
+                      user: { 
+                          _id: sessionParams.userId, 
+                          firstName: sessionParams.userName,
+                      }
+                  })
+              });
+  
+              if (!statusResponse.ok) {
+                  const error = await statusResponse.json().catch(() => ({}));
+                  throw new Error(error.message || 'Status update failed');
+              }
+  
+              console.log('Sending notification...');
+              const notifyResponse = await fetch(NOTIFICATION_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      id: sessionParams.id,
+                      orderID: sessionParams.orderId,
+                      sender: Number(sessionParams.sender),
+                      status: true,
+                      phoneNumberId: Number(sessionParams.phoneNoId)
+                  })
+              });
+  
+              if (!notifyResponse.ok) {
+                  throw new Error('Notification failed');
+              }
+  
+              // Success flow
+              elements.resultMessage.innerHTML = `
+                  <div class="alert alert-success">
+                      ✅ Request submitted successfully! Closing window...
+                  </div>
+              `;
+              
+              clearPartsList();
+              clearSessionData();
+              
+              setTimeout(() => window.close(), 2000);
+              
+          } catch (error) {
+              console.error('Submission failed:', error);
+              elements.resultMessage.innerHTML = `
+                  <div class="alert alert-danger">
+                      ❌ Error: ${error.message}
+                  </div>
+              `;
+              elements.submitBtn.disabled = false;
+          }
+      }
+  
+      function clearSessionData() {
+          const requiredParams = [
+              'category', 'brand', 'modelNo', 'token', 
+              'orderId', 'currentStatus', 'userId', 'userName','id','sender','phoneNoId'
+          ];
+          requiredParams.forEach(param => sessionStorage.removeItem(param));
+          console.log('Session data cleared');
+      }
+  
+      // Utility Functions
+      function showToast(message, type = 'info') {
+          const toast = document.createElement('div');
+          toast.className = `toast align-items-center text-bg-${type} border-0`;
+          toast.innerHTML = `
+              <div class="d-flex">
+                  <div class="toast-body">${message}</div>
+                  <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+              </div>
+          `;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 3000);
+      }
+  
+      function removePart(index) {
+          const removedPart = selectedParts.splice(index, 1)[0];
+          updatePartsList();
+          elements.submitBtn.disabled = selectedParts.length === 0;
+          console.log(`Removed part: ${removedPart.partData.name}`);
+      }
+  
+      function clearPartsList() {
+          selectedParts = [];
+          updatePartsList();
+          elements.submitBtn.disabled = true;
+          console.log('Parts list cleared');
+      }
+  </script>
 </body>
 </html>
