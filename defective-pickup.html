@@ -6,153 +6,245 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #f0f2f5;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f8f9fa;
+      padding: 20px;
     }
-    .form-card {
-      background: white;
-      padding: 2rem;
-      border-radius: 1rem;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-      width: 100%;
-      max-width: 420px;
+
+    .form-container {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.08);
+      max-width: 500px;
+      margin: auto;
     }
+
     h2 {
-      text-align: center;
       margin-bottom: 1rem;
       color: #333;
     }
+
     label {
-      font-weight: 600;
       display: block;
-      margin-bottom: 0.5rem;
+      margin: 10px 0 6px;
+      font-weight: 500;
     }
+
     input[type="file"] {
+      display: block;
       width: 100%;
-      padding: 0.8rem;
-      border: 2px dashed #ccc;
-      border-radius: 0.5rem;
-      margin-bottom: 1rem;
-      background-color: #f9f9f9;
+      padding: 8px;
+      background: #f1f1f1;
+      border-radius: 6px;
+      border: 1px solid #ccc;
     }
+
     button {
-      width: 100%;
-      padding: 0.9rem;
-      background: #007bff;
-      color: white;
+      padding: 10px 18px;
+      margin-top: 15px;
       border: none;
-      border-radius: 0.5rem;
-      font-weight: bold;
+      border-radius: 6px;
+      background-color: #007bff;
+      color: #fff;
+      font-weight: 600;
       cursor: pointer;
-      transition: background 0.3s;
+      margin-right: 10px;
     }
+
     button:hover {
-      background: #0056b3;
+      background-color: #0056b3;
     }
+
+    .photo-list {
+      margin-top: 20px;
+    }
+
+    .photo-item {
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .photo-item img {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+    }
+
     .alert {
-      padding: 0.8rem;
-      margin-top: 1rem;
-      border-radius: 0.4rem;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 6px;
     }
+
+    .alert-success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+
     .alert-danger {
       background-color: #f8d7da;
       color: #721c24;
     }
-    .alert-success {
-      background-color: #d4edda;
-      color: #155724;
+
+    .alert-info {
+      background-color: #d1ecf1;
+      color: #0c5460;
     }
   </style>
 </head>
 <body>
 
-  <div class="form-card">
-    <h2>Defective Pickup</h2>
-    <div id="sessionError" class="alert alert-danger" style="display: none;"></div>
-    <form id="defectiveForm" style="display: none;">
-      <label for="defectivePhoto">Upload Defective Item Photo</label>
-      <input type="file" id="defectivePhoto" name="defectivePhoto" accept="image/*" required>
-      <button type="submit">Upload Photo</button>
+  <div class="form-container">
+    <h2>Upload Defective Part Photos</h2>
+    <form id="defectiveForm">
+      <label for="docFile">Select Image</label>
+      <input type="file" id="docFile" name="docFile" accept="image/*" required>
+      <button type="button" onclick="handleAdd()">Add Photo</button>
+      <button type="submit">Submit All</button>
     </form>
-    <div id="resultDiv"></div>
+    <div id="docList" class="photo-list"></div>
+    <div id="resultDiv" class="alert"></div>
   </div>
 
   <script>
-    const queryParams = new URLSearchParams(window.location.search);
-    const token = queryParams.get("token");
-    const id = queryParams.get("id");
-    const orderId = queryParams.get("orderId");
+    const STATUS_API_URL = 'http://172.188.56.173:8009/api/v1/order-statuses';
+    const urlParams = new URLSearchParams(window.location.search);
+    const id = urlParams.get('id');
+    const orderId = urlParams.get('orderId');
+    const token = urlParams.get('token');
+    const sender = urlParams.get('sender');
+    const phoneNumberId = urlParams.get('phoneNumberId');
+    const userId = urlParams.get('userId') || 'system';
+    const userName = urlParams.get('userName') || 'System';
 
-    const resultDiv = document.getElementById("resultDiv");
     const form = document.getElementById("defectiveForm");
-    const sessionError = document.getElementById("sessionError");
+    const resultDiv = document.getElementById("resultDiv");
+    let pendingDocuments = [];
 
-    if (!token || !id || !orderId) {
-      sessionError.innerText = "Session Error: Missing required information in the URL.";
-      sessionError.style.display = "block";
-    } else {
-      form.style.display = "block";
+    if (!id || !orderId || !token || !sender || !phoneNumberId) {
+      resultDiv.className = "alert alert-danger";
+      resultDiv.innerHTML = "❌ Session error: Missing one or more required parameters in the URL.";
+      form.style.display = "none";
     }
 
-    const documents = [];
+    window.history.pushState({}, document.title, window.location.pathname);
 
-    async function uploadImage(file, fieldType) {
-      if (!file || !token) return;
-
+    async function uploadImage(file) {
       const formData = new FormData();
       formData.append("file", file);
 
+      const response = await fetch("http://172.188.56.173:8008/api/v1/upload?type=order-documents", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+        body: formData
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Upload failed");
+      return data.payload;
+    }
+
+    async function handleAdd() {
+      const file = document.getElementById("docFile").files[0];
+      if (!file) return setAlert("Please select a photo to upload.", "danger");
+
       try {
-        const response = await fetch("http://172.188.56.173:8008/api/v1/upload?type=order-documents", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`
-          },
-          body: formData
+        setAlert("Uploading photo...", "info");
+        const imageUrl = await uploadImage(file);
+
+        pendingDocuments.push({
+          type: { name: 'Defective Photo', value: 1 },
+          key: `${id}_${orderId}_Defective_Photo_${Date.now()}`,
+          url: imageUrl
         });
 
-        const data = await response.json();
-        console.log(`Upload result for ${fieldType}:`, data);
-
-        if (response.ok) {
-          const imageUrl = data.payload;
-
-          documents.push({
-            type: {
-              name: fieldType,
-              value: fieldType === 'Invoice' ? 0 : fieldType === 'Device Photo' ? 3 : 1
-            },
-            key: `${id}_${orderId}_${fieldType}`,
-            url: imageUrl
-          });
-
-          resultDiv.innerHTML = `<p class="alert alert-success">${fieldType} uploaded successfully.</p>`;
-        } else {
-          resultDiv.innerHTML = `<p class="alert alert-danger">${fieldType} upload failed: ${data.message || response.statusText}</p>`;
-        }
-      } catch (error) {
-        console.error(`Error uploading ${fieldType}:`, error);
-        resultDiv.innerHTML = `<p class="alert alert-danger">Error uploading ${fieldType}: ${error.message}</p>`;
+        renderDocList();
+        setAlert("Photo added successfully.", "success");
+      } catch (err) {
+        setAlert(`❌ ${err.message}`, "danger");
       }
+    }
+
+    function renderDocList() {
+      const docList = document.getElementById("docList");
+      if (!pendingDocuments.length) return docList.innerHTML = "<p>No photos added yet.</p>";
+
+      docList.innerHTML = `
+        <h4>Pending Photos:</h4>
+        ${pendingDocuments.map(doc => `
+          <div class="photo-item">
+            <img src="${doc.url}" alt="photo">
+            <span>${doc.type.name}</span>
+          </div>
+        `).join("")}
+      `;
+    }
+
+    function setAlert(message, type) {
+      resultDiv.className = `alert alert-${type}`;
+      resultDiv.innerHTML = message;
     }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const fileInput = document.getElementById("defectivePhoto");
-      const file = fileInput.files[0];
+      if (!pendingDocuments.length) return setAlert("No photos to submit.", "danger");
 
-      if (file) {
-        await uploadImage(file, "Defective Photo");
-      } else {
-        resultDiv.innerHTML = `<p class="alert alert-danger">Please select a photo to upload.</p>`;
+      try {
+        setAlert("Fetching order data...", "info");
+
+        const res = await fetch(`http://172.188.56.173:8009/api/v1/orders/${id}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const updatedDocs = [...(data.payload?.documents || []), ...pendingDocuments];
+
+        setAlert("Updating documents...", "info");
+        await fetch(`http://172.188.56.173:8009/api/v1/orders/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ documents: updatedDocs })
+        });
+
+        const statusRes = await fetch(STATUS_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            order: { orderId, _id: id },
+            lastStatus: "parts_handover_to_tecnician",
+            currentStatus: "defective_pickup",
+            state: "Defective Parts Pickup",
+            statusChangeFrom: "admin",
+            changeFrom: "admin",
+            user: { _id: userId, firstName: userName }
+          })
+        });
+
+        if (!statusRes.ok) throw new Error("Failed to update order status.");
+
+        await fetch('https://609f-2401-4900-b86-b094-96a-2fac-8076-5e9b.ngrok-free.app/notify-defective-part-update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, orderID: orderId, sender: Number(sender), status: true, phoneNumberId: Number(phoneNumberId) })
+        });
+
+        setAlert("✅ All steps completed successfully. This window will close in 2 seconds...", "success");
+        setTimeout(() => window.opener ? window.close() : alert("Please close this window manually."), 2000);
+      } catch (err) {
+        console.error(err);
+        setAlert(`❌ ${err.message}`, "danger");
       }
     });
   </script>
-
 </body>
 </html>
