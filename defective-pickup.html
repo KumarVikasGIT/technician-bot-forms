@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Defective Pickup</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .form-card {
+      background: white;
+      padding: 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 420px;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 1rem;
+      color: #333;
+    }
+    label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+    input[type="file"] {
+      width: 100%;
+      padding: 0.8rem;
+      border: 2px dashed #ccc;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      background-color: #f9f9f9;
+    }
+    button {
+      width: 100%;
+      padding: 0.9rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    .alert {
+      padding: 0.8rem;
+      margin-top: 1rem;
+      border-radius: 0.4rem;
+    }
+    .alert-danger {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    .alert-success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="form-card">
+    <h2>Defective Pickup</h2>
+    <div id="sessionError" class="alert alert-danger" style="display: none;"></div>
+    <form id="defectiveForm" style="display: none;">
+      <label for="defectivePhoto">Upload Defective Item Photo</label>
+      <input type="file" id="defectivePhoto" name="defectivePhoto" accept="image/*" required>
+      <button type="submit">Upload Photo</button>
+    </form>
+    <div id="resultDiv"></div>
+  </div>
+
+  <script>
+    const queryParams = new URLSearchParams(window.location.search);
+    const token = queryParams.get("token");
+    const id = queryParams.get("id");
+    const orderId = queryParams.get("orderId");
+
+    const resultDiv = document.getElementById("resultDiv");
+    const form = document.getElementById("defectiveForm");
+    const sessionError = document.getElementById("sessionError");
+
+    if (!token || !id || !orderId) {
+      sessionError.innerText = "Session Error: Missing required information in the URL.";
+      sessionError.style.display = "block";
+    } else {
+      form.style.display = "block";
+    }
+
+    const documents = [];
+
+    async function uploadImage(file, fieldType) {
+      if (!file || !token) return;
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const response = await fetch("http://172.188.56.173:8008/api/v1/upload?type=order-documents", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        const data = await response.json();
+        console.log(`Upload result for ${fieldType}:`, data);
+
+        if (response.ok) {
+          const imageUrl = data.payload;
+
+          documents.push({
+            type: {
+              name: fieldType,
+              value: fieldType === 'Invoice' ? 0 : fieldType === 'Device Photo' ? 3 : 1
+            },
+            key: `${id}_${orderId}_${fieldType}`,
+            url: imageUrl
+          });
+
+          resultDiv.innerHTML = `<p class="alert alert-success">${fieldType} uploaded successfully.</p>`;
+        } else {
+          resultDiv.innerHTML = `<p class="alert alert-danger">${fieldType} upload failed: ${data.message || response.statusText}</p>`;
+        }
+      } catch (error) {
+        console.error(`Error uploading ${fieldType}:`, error);
+        resultDiv.innerHTML = `<p class="alert alert-danger">Error uploading ${fieldType}: ${error.message}</p>`;
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById("defectivePhoto");
+      const file = fileInput.files[0];
+
+      if (file) {
+        await uploadImage(file, "Defective Photo");
+      } else {
+        resultDiv.innerHTML = `<p class="alert alert-danger">Please select a photo to upload.</p>`;
+      }
+    });
+  </script>
+
+</body>
+</html>
