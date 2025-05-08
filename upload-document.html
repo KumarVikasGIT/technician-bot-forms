@@ -182,7 +182,7 @@
       if (response.ok) {
         resultDiv.innerHTML = `<p class="alert alert-success">Documents updated successfully. Notifying system...</p>`;
 
-        const notifyResponse = await fetch('https://609f-2401-4900-b86-b094-96a-2fac-8076-5e9b.ngrok-free.app/notify-document-upload', {
+        const notifyResponse = await fetch('https://whatsapp-webhook-express.onrender.com/notify-document-upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

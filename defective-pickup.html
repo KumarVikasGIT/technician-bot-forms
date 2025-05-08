@@ -232,7 +232,7 @@
 
         if (!statusRes.ok) throw new Error("Failed to update order status.");
 
-        await fetch('https://609f-2401-4900-b86-b094-96a-2fac-8076-5e9b.ngrok-free.app/notify-defective-part-update', {
+        await fetch('https://whatsapp-webhook-express.onrender.com/notify-defective-part-update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, orderID: orderId, sender: Number(sender), status: true, phoneNumberId: Number(phoneNumberId) })
