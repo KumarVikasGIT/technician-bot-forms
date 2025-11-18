@@ -112,7 +112,7 @@
   </div>
 
   <script>
-    const STATUS_API_URL = 'http://172.188.56.173:8009/api/v1/order-statuses';
+    const STATUS_API_URL = 'http://13.200.40.165:8009/api/v1/order-statuses';
     const urlParams = new URLSearchParams(window.location.search);
     const id = urlParams.get('id');
     const orderId = urlParams.get('orderId');
@@ -138,7 +138,7 @@
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("http://172.188.56.173:8008/api/v1/upload?type=order-documents", {
+      const response = await fetch("http://13.200.40.165:8008/api/v1/upload?type=order-documents", {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` },
         body: formData
@@ -197,14 +197,14 @@
       try {
         setAlert("Fetching order data...", "info");
 
-        const res = await fetch(`http://172.188.56.173:8009/api/v1/orders/${id}`, {
+        const res = await fetch(`http://13.200.40.165:8009/api/v1/orders/${id}`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         const data = await res.json();
         const updatedDocs = [...(data.payload?.documents || []), ...pendingDocuments];
 
         setAlert("Updating documents...", "info");
-        await fetch(`http://172.188.56.173:8009/api/v1/orders/${id}`, {
+        await fetch(`http://13.200.40.165:8009/api/v1/orders/${id}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,
