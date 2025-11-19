@@ -111,7 +111,7 @@
     formData.append("file", file);
 
     try {
-      const response = await fetch("http://13.200.40.165:8008/api/v1/upload?type=order-documents", {
+      const response = await fetch("http://13.200.40.165:8008/admin/api/v1/upload?type=order-documents", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`
@@ -168,7 +168,7 @@
     }
 
     try {
-      const response = await fetch(`http://13.200.40.165:8009/api/v1/orders/${id}`, {
+      const response = await fetch(`http://13.200.40.165:8009/uaer/api/v1/orders/${id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -182,7 +182,7 @@
       if (response.ok) {
         resultDiv.innerHTML = `<p class="alert alert-success">Documents updated successfully. Notifying system...</p>`;
 
-        const notifyResponse = await fetch('https://whatsapp-webhook-express.onrender.com/notify-document-upload', {
+        const notifyResponse = await fetch('https://technician-whatsapp.onrender.com/notify-document-upload', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
